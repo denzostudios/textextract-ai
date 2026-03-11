@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import './index.css';
 import UploadZone from './components/UploadZone';
+import ModelUploadZone from './components/ModelUploadZone';
 import LanguageSelector from './components/LanguageSelector';
 import JsonViewer from './components/JsonViewer';
 import TranslatePanel from './components/TranslatePanel';
 import ApiKeyModal from './components/ApiKeyModal';
 import { renderPDFToCanvases, canvasesToImageParts, getPDFThumbnails, imageFileToImagePart } from './lib/pdfLoader';
 import { extractTextToJSON } from './lib/gemini';
+import { extractModelText } from './lib/modelParser';
 
 export default function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('te_api_key') || '');
@@ -18,6 +20,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [jsonData, setJsonData] = useState(null);
   const [error, setError] = useState(null);
+
+  // Model / template upload
+  const [modelFile, setModelFile] = useState(null);
+  const [modelSchema, setModelSchema] = useState(null); // extracted text from model file
+  const [modelError, setModelError] = useState(null);
+  const [modelLoading, setModelLoading] = useState(false);
 
   // Show API modal if no key on load
   useEffect(() => {
@@ -88,7 +96,7 @@ export default function App() {
         imageParts = [part];
       }
 
-      const result = await extractTextToJSON(apiKey, imageParts, language, ignoreNavFooter);
+      const result = await extractTextToJSON(apiKey, imageParts, language, ignoreNavFooter, modelSchema);
 
       if (!result.success) {
         setError(result.error || 'Could not extract JSON from file.');
@@ -111,6 +119,27 @@ export default function App() {
     setFileInfo(null);
     setJsonData(null);
     setError(null);
+  }
+
+  async function handleModelSelected(file) {
+    setModelFile(file);
+    setModelSchema(null);
+    setModelError(null);
+    setModelLoading(true);
+    const result = await extractModelText(file);
+    setModelLoading(false);
+    if (result.success) {
+      setModelSchema(result.text);
+    } else {
+      setModelError(result.error || 'Could not read model file.');
+      setModelFile(null);
+    }
+  }
+
+  function handleModelRemove() {
+    setModelFile(null);
+    setModelSchema(null);
+    setModelError(null);
   }
 
   function handleApiKeySave(key) {
@@ -151,6 +180,33 @@ export default function App() {
           <div>
             <div className="card-title">Upload File</div>
             <UploadZone onFileSelected={handleFileSelected} />
+          </div>
+
+          {/* JSON Model / Template upload */}
+          <div>
+            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              JSON Model
+              {modelSchema && (
+                <span className="model-active-badge">✦ Active</span>
+              )}
+            </div>
+            {modelError && (
+              <div className="error-box" style={{ marginBottom: 8 }}>
+                <span>⚠️</span><span>{modelError}</span>
+              </div>
+            )}
+            {modelLoading ? (
+              <div className="model-loading">
+                <span className="spinner" />
+                Reading model file...
+              </div>
+            ) : (
+              <ModelUploadZone
+                modelFile={modelFile}
+                onModelSelected={handleModelSelected}
+                onModelRemove={handleModelRemove}
+              />
+            )}
           </div>
 
           {/* File preview */}

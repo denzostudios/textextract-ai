@@ -29,8 +29,13 @@ function canvasToGenerativePart(canvas) {
 
 /**
  * Extract and structure text from image parts using Gemini
+ * @param {string} apiKey
+ * @param {object[]} imageParts
+ * @param {string} language
+ * @param {boolean} ignoreNavFooter
+ * @param {string|null} modelSchema - Optional text from an uploaded model/template file
  */
-export async function extractTextToJSON(apiKey, imageParts, language, ignoreNavFooter = false) {
+export async function extractTextToJSON(apiKey, imageParts, language, ignoreNavFooter = false, modelSchema = null) {
   const genAI = getClient(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
@@ -38,20 +43,14 @@ export async function extractTextToJSON(apiKey, imageParts, language, ignoreNavF
     ? `7. IMPORTANT: Do NOT include navigation bars (navbars), top menus, header navigation links, or footer sections in the output. Skip any nav, header nav, or footer elements entirely.`
     : `7. Include ALL elements found on the page, including navigation bars and footers.`;
 
-  const prompt = `You are an expert at analyzing design files (PDFs and images) for web development teams.
-
-Analyze the provided image(s) and extract ALL visible text content. Structure it into a detailed JSON object that a developer can directly use to populate a website or app.
-
-Rules:
-1. Detect the hierarchy: page title, section headings, subheadings, body paragraphs, labels, buttons, links, form fields, placeholder text, legal/footer text, etc.
-2. Maintain reading order (top to bottom, left to right).
-3. Group logically related content into sections.
-4. Output ONLY valid JSON, no markdown fences, no extra explanation.
-5. Output language: ${language}
-6. Use descriptive, semantic keys in camelCase (e.g., "heroTitle", "ctaButton", "formLabel").
-${navFooterRule}
-
-JSON structure to follow:
+  // Build structure instructions based on whether a model schema was provided
+  const structureSection = modelSchema
+    ? `JSON STRUCTURE REFERENCE (follow this exactly — keys, nesting, and field names must mirror this model):
+\`\`\`
+${modelSchema.slice(0, 8000)}
+\`\`\`
+CRITICAL: Your output JSON must follow the same structure, key names, and nesting as the reference above. Adapt the values from the image, but keep the shape identical.`
+    : `JSON structure to follow:
 {
   "meta": {
     "language": "${language}",
@@ -66,7 +65,22 @@ JSON structure to follow:
       ]
     }
   ]
-}
+}`;
+
+  const prompt = `You are an expert at analyzing design files (PDFs and images) for web development teams.
+
+Analyze the provided image(s) and extract ALL visible text content. Structure it into a detailed JSON object that a developer can directly use to populate a website or app.
+
+Rules:
+1. Detect the hierarchy: page title, section headings, subheadings, body paragraphs, labels, buttons, links, form fields, placeholder text, legal/footer text, etc.
+2. Maintain reading order (top to bottom, left to right).
+3. Group logically related content into sections.
+4. Output ONLY valid JSON, no markdown fences, no extra explanation.
+5. Output language: ${language}
+6. Use descriptive, semantic keys in camelCase (e.g., "heroTitle", "ctaButton", "formLabel").
+${navFooterRule}
+
+${structureSection}
 
 Extract every piece of visible text. Do not skip anything, including small labels, placeholder text, checkbox text, legal disclaimers, button text, etc.`;
 
